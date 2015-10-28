@@ -117,6 +117,63 @@ func (c *Client) SendRemoteCommEvent(typ, data interface{}) error {
 	return FIXMENotImplementedError
 }
 
+// Reload configuration
+//
+// This will not change, start or stop any running processes. It will only
+// read new configuration. See Update() for an all-in-one solution
+func (c *Client) ReloadConfig() ([]string, []string, []string, error) {
+	result := make([][][]string, 0)
+
+	err := c.Call("supervisor.reloadConfig", nil, &result)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if len(result) != 1 {
+		return nil, nil, nil, ReturnedMalformedReply
+	}
+
+	if len(result[0]) != 3 {
+		return nil, nil, nil, ReturnedMalformedReply
+	}
+
+	return result[0][0], result[0][1], result[0][2], err
+}
+
+// This will reload configuration and adapt running processes to the new
+// configuration. Changed program groups will be restarted
+// Should behave like "supervisorctl update"
+func (c *Client) Update() error {
+	added, changed, removed, err := c.ReloadConfig()
+	if err != nil {
+		return err
+	}
+
+	toStart := append(added, changed...)
+	toStop := append(changed, removed...)
+
+	for _, name := range toStop {
+		_, err = c.StopProcessGroup(name, true)
+		if err != nil {
+			return err
+		}
+
+		err = c.RemoveProcessGroup(name)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, name := range toStart {
+		err = c.AddProcessGroup(name)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Update the config for a running process from config file
 func (c *Client) AddProcessGroup(name string) error {
 	return c.boolCall("supervisor.addProcessGroup", name)

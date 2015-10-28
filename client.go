@@ -15,11 +15,13 @@ type (
 var (
 	FIXMENotImplementedError error
 	ReturnedFalseError       error
+	ReturnedMalformedReply   error
 )
 
 func init() {
 	FIXMENotImplementedError = errors.New("Not implemented yet")
 	ReturnedFalseError = errors.New("Call returned false")
+	ReturnedMalformedReply = errors.New("Call returned malformed reply")
 }
 
 func (c *Client) stringCall(method string, args ...interface{}) (string, error) {
