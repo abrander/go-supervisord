@@ -3,7 +3,7 @@ package supervisord
 import ()
 
 type (
-	// A structure containing data about the process
+	// A structure containing data about a process.
 	ProcessInfo struct {
 		Name          string       `xmlrpc:"name"`           // Name of the process
 		Group         string       `xmlrpc:"group"`          // Name of the process’ group
@@ -46,7 +46,7 @@ func (c *Client) processInfoArrayCall(method string, args ...interface{}) ([]Pro
 	return processinfo, nil
 }
 
-// Get info about a process named name
+// Get info about a process named name.
 func (c *Client) GetProcessInfo(name string) (*ProcessInfo, error) {
 	var processinfo ProcessInfo
 	err := c.Call("supervisor.getProcessInfo", name, &processinfo)
@@ -57,70 +57,67 @@ func (c *Client) GetProcessInfo(name string) (*ProcessInfo, error) {
 	return &processinfo, nil
 }
 
-// Get info about all processes
+// Get info about all processes.
 func (c *Client) GetAllProcessInfo() ([]ProcessInfo, error) {
 	return c.processInfoArrayCall("supervisor.getAllProcessInfo")
 }
 
-// Start a process
+// Start a process.
 func (c *Client) StartProcess(name string, wait bool) error {
 	return c.boolCall("supervisor.startProcess", name, wait)
 }
 
-// Start all processes listed in the configuration file
+// Start all processes listed in the configuration file.
 //
-// Set wait to true if the call should wait for completion before returning
+// Set wait to true if the call should wait for completion before returning.
 func (c *Client) StartAllProcesses(wait bool) ([]ProcessInfo, error) {
 	return c.processInfoArrayCall("supervisor.startAllProcesses", wait)
 }
 
-// Start all processes in the group named name
+// Start all processes in the group named name.
 //
-// Set wait to true if the call should wait for completion before returning
+// Set wait to true if the call should wait for completion before returning.
 func (c *Client) StartProcessGroup(name string, wait bool) ([]ProcessInfo, error) {
 	return c.processInfoArrayCall("supervisor.startProcessGroup", name, wait)
 }
 
-// Stop a process named by name
+// Stop a process named by name.
 //
-// Set wait to true if the call should wait for completion before returning
+// Set wait to true if the call should wait for completion before returning.
 func (c *Client) StopProcess(name string, wait bool) error {
 	return c.boolCall("supervisor.stopProcess", name, wait)
 }
 
-// Stop all processes in the process group named name
+// Stop all processes in the process group named name.
 //
-// Set wait to true if the call should wait for completion before returning
+// Set wait to true if the call should wait for completion before returning.
 func (c *Client) StopProcessGroup(name string, wait bool) ([]ProcessInfo, error) {
 	return c.processInfoArrayCall("supervisor.stopProcessGroup", name, wait)
 }
 
-// Stop all processes in the process list
+// Stop all processes in the process list.
 //
-// Set wait to true if the call should wait for completion before returning
+// Set wait to true if the call should wait for completion before returning.
 func (c *Client) StopAllProcesses(wait bool) ([]ProcessInfo, error) {
 	return c.processInfoArrayCall("supervisor.stopAllProcesses", wait)
 }
 
-// Send a string of chars to the stdin of the process name. If the
-// process’ stdin cannot accept input (e.g. it was closed by the child
-// process), return non-nil error
+// Send a string to the stdin of the process name. If the process’s
+// stdin cannot accept input (e.g. it was closed by the child process),
+// return non-nil error.
 func (c *Client) SendProcessStdin(name string, chars string) error {
 	return c.boolCall("supervisor.sendProcessStdin", name, chars)
 }
 
-// Send an event that will be received by event listener subprocesses
-// subscribing to the RemoteCommunicationEvent
-//
-// FIXME: Not implemented. I have no idea what this is?
+// This is not implemented yet.
 func (c *Client) SendRemoteCommEvent(typ, data interface{}) error {
 	return FIXMENotImplementedError
 }
 
-// Reload configuration
+// Reload supervisord configuration.
 //
 // This will not change, start or stop any running processes. It will only
-// read new configuration. See Update() for an all-in-one solution
+// read new configuration. See Update() for an all-in-one solution.
 func (c *Client) ReloadConfig() ([]string, []string, []string, error) {
 	result := make([][][]string, 0)
 
@@ -141,8 +138,8 @@ func (c *Client) ReloadConfig() ([]string, []string, []string, error) {
 }
 
 // This will reload configuration and adapt running processes to the new
-// configuration. Changed program groups will be restarted
-// Should behave like "supervisorctl update"
+// configuration. Changed program groups will be restarted.
+// Should behave like "supervisorctl update".
 func (c *Client) Update() error {
 	added, changed, removed, err := c.ReloadConfig()
 	if err != nil {
@@ -174,12 +171,12 @@ func (c *Client) Update() error {
 	return nil
 }
 
-// Update the config for a running process from config file
+// Update the config for a running process from config file.
 func (c *Client) AddProcessGroup(name string) error {
 	return c.boolCall("supervisor.addProcessGroup", name)
 }
 
-// Remove a stopped process from the active configuration
+// Remove a stopped process from the active configuration.
 func (c *Client) RemoveProcessGroup(name string) error {
 	return c.boolCall("supervisor.removeProcessGroup", name)
 }
