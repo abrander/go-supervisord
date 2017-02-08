@@ -1,6 +1,6 @@
 package supervisord
 
-import ()
+import "syscall"
 
 type (
 	// A structure containing data about a process.
@@ -60,6 +60,22 @@ func (c *Client) GetProcessInfo(name string) (*ProcessInfo, error) {
 // Get info about all processes.
 func (c *Client) GetAllProcessInfo() ([]ProcessInfo, error) {
 	return c.processInfoArrayCall("supervisor.getAllProcessInfo")
+}
+
+// SignalProcess sends a signal to a process
+// name: Name of the process to signal (or ‘group:name’)
+// signal: Signal to send
+// Requires supervisord >= 3.2.0
+// http://supervisord.org/changes.html#id6
+func (c *Client) SignalProcess(name string, signal syscall.Signal) error {
+	return c.boolCall("supervisor.signalProcess", name, int(signal))
+}
+
+// SignalAllProcesses sends a signal to all processes in the process list
+// Requires supervisord >= 3.2.0
+// http://supervisord.org/changes.html#id6
+func (c *Client) SignalAllProcesses(signal syscall.Signal) ([]ProcessInfo, error) {
+	return c.processInfoArrayCall("supervisor.signalAllProcesses", int(signal))
 }
 
 // Start a process.
