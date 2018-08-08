@@ -2,6 +2,8 @@ package supervisord
 
 import (
 	"errors"
+	"net"
+	"net/http"
 
 	"github.com/kolo/xmlrpc"
 )
@@ -61,4 +63,30 @@ func NewClient(url string) (*Client, error) {
 	}
 
 	return &Client{rpc}, nil
+}
+
+// NewUnixSocketClient returns a new client which connects to supervisord
+// though a local unix socket
+func NewUnixSocketClient(path string) (*Client, error) {
+
+	// we inject this fake dialer, it will only connect
+	// to the path given, and does not care about what address
+	// is given to it.
+	dialer := func(_, _ string) (conn net.Conn, err error) {
+		return net.Dial("unix", path)
+	}
+
+	tr := &http.Transport{
+		Dial: dialer,
+	}
+
+	// we pass a valid url, as this is later url.Parse()'ed
+	// also we need to somehow specify "/RPC2"
+	rpc, err := xmlrpc.NewClient("http://127.0.0.1/RPC2", tr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{rpc}, nil
+
 }
