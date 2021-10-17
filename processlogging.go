@@ -20,8 +20,14 @@ func (c *Client) ReadProcessStderrLog(name string, offset int, length int) (stri
 }
 
 // This is not implemented yet.
-func (c *Client) TailProcessStdoutLog(name string, offset int, length int) ([]LogSegment, error) {
-	return nil, FIXMENotImplementedError
+func (c *Client) TailProcessStdoutLog(name string, offset int, length int) (string, error) {
+	ret := make([]interface{}, 0)
+
+	err := c.Call("supervisor.tailProcessStdoutLog", []interface{}{name, offset, length}, &ret)
+	if err != nil {
+		return "", err
+	}
+	return ret[0].(string), nil
 }
 
 // This is not implemented yet.
