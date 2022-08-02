@@ -1,16 +1,26 @@
 package supervisord
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/kolo/xmlrpc"
 )
 
+var DefaultRequestTimeoutSec = 30
+
 type (
 	Client struct {
-		*xmlrpc.Client
+		rpcUrl            string
+		cl                *http.Client
+		debug             bool
+		requestTimeoutSec int
 	}
 )
 
@@ -33,6 +43,15 @@ func init() {
 
 type options struct {
 	username, password string
+
+	debug      bool
+	timeoutSec int
+}
+
+func (me *options) setDefaults() {
+	if me.timeoutSec == 0 {
+		me.timeoutSec = DefaultRequestTimeoutSec
+	}
 }
 
 // ClientOption is used to customize the client.
@@ -46,8 +65,27 @@ func WithAuthentication(username, password string) ClientOption {
 	}
 }
 
+func WithRequestTimeout(sec int) ClientOption {
+	return func(o *options) {
+		o.timeoutSec = sec
+	}
+}
+func WithDebug(debug bool) ClientOption {
+	return func(o *options) {
+		o.debug = debug
+	}
+}
+
+func (c *Client) logf(s string, args ...interface{}) {
+	if c.debug == false {
+		return
+	}
+	fmt.Printf(s+"\n", args...)
+}
+
 func (c *Client) stringCall(method string, args ...interface{}) (string, error) {
 	var str string
+	c.logf("stringcall method:%s args:%q", method, args)
 	err := c.Call(method, args, &str)
 
 	return str, err
@@ -55,6 +93,7 @@ func (c *Client) stringCall(method string, args ...interface{}) (string, error) 
 
 func (c *Client) boolCall(method string, args ...interface{}) error {
 	var result bool
+	c.logf("boolcall method:%s args:%q", method, args)
 	err := c.Call(method, args, &result)
 	if err != nil {
 		return err
@@ -62,6 +101,58 @@ func (c *Client) boolCall(method string, args ...interface{}) error {
 
 	if !result {
 		return ReturnedFalseError
+	}
+
+	return nil
+}
+
+func (c *Client) Call(method string, args interface{}, reply interface{}) error {
+
+	// encode request
+	largs := args.([]interface{})
+	buf, err := xmlrpc.EncodeMethodCall(method, largs...)
+	if err != nil {
+		return err
+	}
+	c.logf("xmlrpc call method:%s timeout:%d args:%q\n", method, c.requestTimeoutSec, buf)
+
+	reqTimeout := time.Duration(c.requestTimeoutSec) * time.Second
+
+	ctx := context.Background()
+	ctx2, cancel := context.WithTimeout(ctx, reqTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx2, "POST", c.rpcUrl, bytes.NewBuffer(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "text/xml")
+
+	c.logf("xmlrpc do request method:%s url:%s", method, c.rpcUrl)
+	resp, err := c.cl.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	buf2, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// decode
+	c.logf("xmlrpc decode response %q", buf2)
+	xres := xmlrpc.Response(buf2)
+
+	if xres.Err() != nil {
+		c.logf("ERROR: %s", xres.Err())
+		return xres.Err()
+	}
+
+	err = xres.Unmarshal(reply)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -77,8 +168,8 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 		o(opt)
 	}
 
-	var tr http.RoundTripper = http.DefaultTransport
-
+	var tr http.RoundTripper
+	tr = &http.Transport{}
 	if opt.username != "" && opt.password != "" {
 		tr = &basicAuthTransport{
 			username: opt.username,
@@ -87,12 +178,19 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 		}
 	}
 
-	rpc, err := xmlrpc.NewClient(url, tr)
-	if err != nil {
-		return nil, err
+	cl := &http.Client{}
+	cl.Transport = tr
+
+	opt.setDefaults()
+
+	me := &Client{
+		cl:                cl,
+		rpcUrl:            url,
+		requestTimeoutSec: opt.timeoutSec,
+		debug:             opt.debug,
 	}
 
-	return &Client{rpc}, nil
+	return me, nil
 }
 
 // NewUnixSocketClient returns a new client which connects to supervisord
@@ -121,15 +219,21 @@ func NewUnixSocketClient(path string, opts ...ClientOption) (*Client, error) {
 			rt:       tr,
 		}
 	}
+	opt.setDefaults()
 
 	// we pass a valid url, as this is later url.Parse()'ed
 	// also we need to somehow specify "/RPC2"
-	rpc, err := xmlrpc.NewClient("http://127.0.0.1/RPC2", tr)
-	if err != nil {
-		return nil, err
-	}
+	cl := &http.Client{}
+	cl.Transport = tr
 
-	return &Client{rpc}, nil
+	rpcUrl := "http://127.0.0.1:9001/RPC2"
+	me := &Client{
+		cl:                cl,
+		rpcUrl:            rpcUrl,
+		requestTimeoutSec: opt.timeoutSec,
+		debug:             opt.debug,
+	}
+	return me, nil
 
 }
 
