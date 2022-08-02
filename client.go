@@ -77,7 +77,7 @@ func WithDebug(debug bool) ClientOption {
 }
 
 func (c *Client) logf(s string, args ...interface{}) {
-	if c.debug {
+	if c.debug == false {
 		return
 	}
 	fmt.Printf(s+"\n", args...)
@@ -150,7 +150,7 @@ func (c *Client) Call(method string, args interface{}, reply interface{}) error 
 		return xres.Err()
 	}
 
-	err = xres.Unmarshal(&reply)
+	err = xres.Unmarshal(reply)
 	if err != nil {
 		return err
 	}
