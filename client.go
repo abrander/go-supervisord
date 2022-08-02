@@ -19,8 +19,8 @@ type (
 	Client struct {
 		rpcUrl            string
 		cl                *http.Client
-		Debug             bool
-		RequestTimeoutSec int
+		debug             bool
+		requestTimeoutSec int
 	}
 )
 
@@ -43,6 +43,15 @@ func init() {
 
 type options struct {
 	username, password string
+
+	debug      bool
+	timeoutSec int
+}
+
+func (me *options) setDefaults() {
+	if me.timeoutSec == 0 {
+		me.timeoutSec = DefaultRequestTimeoutSec
+	}
 }
 
 // ClientOption is used to customize the client.
@@ -56,8 +65,19 @@ func WithAuthentication(username, password string) ClientOption {
 	}
 }
 
+func WithRequestTimeout(sec int) ClientOption {
+	return func(o *options) {
+		o.timeoutSec = sec
+	}
+}
+func WithDebug(debug bool) ClientOption {
+	return func(o *options) {
+		o.debug = debug
+	}
+}
+
 func (c *Client) logf(s string, args ...interface{}) {
-	if c.Debug {
+	if c.debug {
 		return
 	}
 	fmt.Printf(s+"\n", args...)
@@ -94,9 +114,9 @@ func (c *Client) Call(method string, args interface{}, reply interface{}) error 
 	if err != nil {
 		return err
 	}
-	c.logf("xmlrpc call method:%s args:%q\n", method, buf)
+	c.logf("xmlrpc call method:%s timeout:%d args:%q\n", method, c.requestTimeoutSec, buf)
 
-	reqTimeout := time.Duration(c.RequestTimeoutSec) * time.Second
+	reqTimeout := time.Duration(c.requestTimeoutSec) * time.Second
 
 	ctx := context.Background()
 	ctx2, cancel := context.WithTimeout(ctx, reqTimeout)
@@ -161,13 +181,13 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 	cl := &http.Client{}
 	cl.Transport = tr
 
-	me := &Client{
-		cl:     cl,
-		rpcUrl: url,
-	}
+	opt.setDefaults()
 
-	if me.RequestTimeoutSec == 0 {
-		me.RequestTimeoutSec = DefaultRequestTimeoutSec
+	me := &Client{
+		cl:                cl,
+		rpcUrl:            url,
+		requestTimeoutSec: opt.timeoutSec,
+		debug:             opt.debug,
 	}
 
 	return me, nil
@@ -199,6 +219,7 @@ func NewUnixSocketClient(path string, opts ...ClientOption) (*Client, error) {
 			rt:       tr,
 		}
 	}
+	opt.setDefaults()
 
 	// we pass a valid url, as this is later url.Parse()'ed
 	// also we need to somehow specify "/RPC2"
@@ -207,8 +228,10 @@ func NewUnixSocketClient(path string, opts ...ClientOption) (*Client, error) {
 
 	rpcUrl := "http://127.0.0.1:9001/RPC2"
 	me := &Client{
-		rpcUrl: rpcUrl,
-		cl:     cl,
+		cl:                cl,
+		rpcUrl:            rpcUrl,
+		requestTimeoutSec: opt.timeoutSec,
+		debug:             opt.debug,
 	}
 	return me, nil
 
