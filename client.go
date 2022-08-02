@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/divan/gorilla-xmlrpc/xml"
+	"github.com/kolo/xmlrpc"
 )
 
 type (
@@ -52,14 +54,16 @@ func WithAuthentication(username, password string) ClientOption {
 
 func (c *Client) stringCall(method string, args ...interface{}) (string, error) {
 	var str string
-	err := c.doCall(method, args, &str)
+	fmt.Printf("stringcall method:%s args:%q\n", method, args)
+	err := c.Call(method, args, &str)
 
 	return str, err
 }
 
 func (c *Client) boolCall(method string, args ...interface{}) error {
 	var result bool
-	err := c.doCall(method, args, &result)
+	fmt.Printf("boolcall method:%s args:%q\n", method, args)
+	err := c.Call(method, args, &result)
 	if err != nil {
 		return err
 	}
@@ -72,13 +76,14 @@ func (c *Client) boolCall(method string, args ...interface{}) error {
 }
 
 func (c *Client) Call(method string, args interface{}, reply interface{}) error {
-	return c.doCall(method, args, reply)
-}
 
-func (c *Client) doCall(method string, args interface{}, reply interface{}) error {
-
-	//todo: set timeout
-	buf, _ := xml.EncodeClientRequest(method, &args)
+	// encode request
+	largs := args.([]interface{})
+	buf, err := xmlrpc.EncodeMethodCall(method, largs...)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("xmlrpc call method:%s args:%q\n", method, buf)
 
 	reqTimeout := time.Duration(30) * time.Second
 
@@ -92,6 +97,7 @@ func (c *Client) doCall(method string, args interface{}, reply interface{}) erro
 	}
 	req.Header.Set("Content-Type", "text/xml")
 
+	fmt.Printf("xmlrpc do request method:%s url:%s\n", method, c.rpcUrl)
 	resp, err := c.cl.Do(req)
 	if err != nil {
 		return err
@@ -99,7 +105,21 @@ func (c *Client) doCall(method string, args interface{}, reply interface{}) erro
 
 	defer resp.Body.Close()
 
-	err = xml.DecodeClientResponse(resp.Body, &reply)
+	buf2, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// decode
+	fmt.Printf("xmlrpc decode response %q\n", buf2)
+	xres := xmlrpc.Response(buf2)
+
+	if xres.Err() != nil {
+		fmt.Printf("ERROR: %s\n", xres.Err())
+		return xres.Err()
+	}
+
+	err = xres.Unmarshal(reply)
 	if err != nil {
 		return err
 	}
