@@ -1,16 +1,20 @@
 package supervisord
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"net"
 	"net/http"
+	"time"
 
-	"github.com/kolo/xmlrpc"
+	"github.com/divan/gorilla-xmlrpc/xml"
 )
 
 type (
 	Client struct {
-		*xmlrpc.Client
+		rpcUrl string
+		cl     *http.Client
 	}
 )
 
@@ -48,20 +52,56 @@ func WithAuthentication(username, password string) ClientOption {
 
 func (c *Client) stringCall(method string, args ...interface{}) (string, error) {
 	var str string
-	err := c.Call(method, args, &str)
+	err := c.doCall(method, args, &str)
 
 	return str, err
 }
 
 func (c *Client) boolCall(method string, args ...interface{}) error {
 	var result bool
-	err := c.Call(method, args, &result)
+	err := c.doCall(method, args, &result)
 	if err != nil {
 		return err
 	}
 
 	if !result {
 		return ReturnedFalseError
+	}
+
+	return nil
+}
+
+func (c *Client) Call(method string, args interface{}, reply interface{}) error {
+	return c.doCall(method, args, reply)
+}
+
+func (c *Client) doCall(method string, args interface{}, reply interface{}) error {
+
+	//todo: set timeout
+	buf, _ := xml.EncodeClientRequest(method, &args)
+
+	reqTimeout := time.Duration(30) * time.Second
+
+	ctx := context.Background()
+	ctx2, cancel := context.WithTimeout(ctx, reqTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx2, "POST", c.rpcUrl, bytes.NewBuffer(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "text/xml")
+
+	resp, err := c.cl.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	err = xml.DecodeClientResponse(resp.Body, &reply)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -77,8 +117,8 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 		o(opt)
 	}
 
-	var tr http.RoundTripper = http.DefaultTransport
-
+	var tr http.RoundTripper
+	tr = &http.Transport{}
 	if opt.username != "" && opt.password != "" {
 		tr = &basicAuthTransport{
 			username: opt.username,
@@ -87,12 +127,14 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 		}
 	}
 
-	rpc, err := xmlrpc.NewClient(url, tr)
-	if err != nil {
-		return nil, err
-	}
+	cl := &http.Client{}
+	cl.Transport = tr
 
-	return &Client{rpc}, nil
+	me := &Client{
+		cl:     cl,
+		rpcUrl: url,
+	}
+	return me, nil
 }
 
 // NewUnixSocketClient returns a new client which connects to supervisord
@@ -124,12 +166,15 @@ func NewUnixSocketClient(path string, opts ...ClientOption) (*Client, error) {
 
 	// we pass a valid url, as this is later url.Parse()'ed
 	// also we need to somehow specify "/RPC2"
-	rpc, err := xmlrpc.NewClient("http://127.0.0.1/RPC2", tr)
-	if err != nil {
-		return nil, err
-	}
+	cl := &http.Client{}
+	cl.Transport = tr
 
-	return &Client{rpc}, nil
+	rpcUrl := "http://127.0.0.1:9001/RPC2"
+	me := &Client{
+		rpcUrl: rpcUrl,
+		cl:     cl,
+	}
+	return me, nil
 
 }
 
