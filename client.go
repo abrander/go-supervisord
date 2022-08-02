@@ -13,11 +13,14 @@ import (
 	"github.com/kolo/xmlrpc"
 )
 
+var DefaultRequestTimeoutSec = 30
+
 type (
 	Client struct {
-		rpcUrl string
-		cl     *http.Client
-		Debug  bool
+		rpcUrl            string
+		cl                *http.Client
+		Debug             bool
+		RequestTimeoutSec int
 	}
 )
 
@@ -93,7 +96,7 @@ func (c *Client) Call(method string, args interface{}, reply interface{}) error 
 	}
 	c.logf("xmlrpc call method:%s args:%q\n", method, buf)
 
-	reqTimeout := time.Duration(30) * time.Second
+	reqTimeout := time.Duration(c.RequestTimeoutSec) * time.Second
 
 	ctx := context.Background()
 	ctx2, cancel := context.WithTimeout(ctx, reqTimeout)
@@ -162,6 +165,11 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 		cl:     cl,
 		rpcUrl: url,
 	}
+
+	if me.RequestTimeoutSec == 0 {
+		me.RequestTimeoutSec = DefaultRequestTimeoutSec
+	}
+
 	return me, nil
 }
 
