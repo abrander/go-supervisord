@@ -17,6 +17,7 @@ type (
 	Client struct {
 		rpcUrl string
 		cl     *http.Client
+		Debug  bool
 	}
 )
 
@@ -52,9 +53,16 @@ func WithAuthentication(username, password string) ClientOption {
 	}
 }
 
+func (c *Client) logf(s string, args ...interface{}) {
+	if c.Debug {
+		return
+	}
+	fmt.Printf(s+"\n", args...)
+}
+
 func (c *Client) stringCall(method string, args ...interface{}) (string, error) {
 	var str string
-	fmt.Printf("stringcall method:%s args:%q\n", method, args)
+	c.logf("stringcall method:%s args:%q", method, args)
 	err := c.Call(method, args, &str)
 
 	return str, err
@@ -62,7 +70,7 @@ func (c *Client) stringCall(method string, args ...interface{}) (string, error) 
 
 func (c *Client) boolCall(method string, args ...interface{}) error {
 	var result bool
-	fmt.Printf("boolcall method:%s args:%q\n", method, args)
+	c.logf("boolcall method:%s args:%q", method, args)
 	err := c.Call(method, args, &result)
 	if err != nil {
 		return err
@@ -83,7 +91,7 @@ func (c *Client) Call(method string, args interface{}, reply interface{}) error 
 	if err != nil {
 		return err
 	}
-	fmt.Printf("xmlrpc call method:%s args:%q\n", method, buf)
+	c.logf("xmlrpc call method:%s args:%q\n", method, buf)
 
 	reqTimeout := time.Duration(30) * time.Second
 
@@ -97,7 +105,7 @@ func (c *Client) Call(method string, args interface{}, reply interface{}) error 
 	}
 	req.Header.Set("Content-Type", "text/xml")
 
-	fmt.Printf("xmlrpc do request method:%s url:%s\n", method, c.rpcUrl)
+	c.logf("xmlrpc do request method:%s url:%s", method, c.rpcUrl)
 	resp, err := c.cl.Do(req)
 	if err != nil {
 		return err
@@ -111,15 +119,15 @@ func (c *Client) Call(method string, args interface{}, reply interface{}) error 
 	}
 
 	// decode
-	fmt.Printf("xmlrpc decode response %q\n", buf2)
+	c.logf("xmlrpc decode response %q", buf2)
 	xres := xmlrpc.Response(buf2)
 
 	if xres.Err() != nil {
-		fmt.Printf("ERROR: %s\n", xres.Err())
+		c.logf("ERROR: %s", xres.Err())
 		return xres.Err()
 	}
 
-	err = xres.Unmarshal(reply)
+	err = xres.Unmarshal(&reply)
 	if err != nil {
 		return err
 	}
