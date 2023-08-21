@@ -27,7 +27,11 @@ func (c *Client) TailProcessStdoutLog(name string, offset int, length int) (stri
 	if err != nil {
 		return "", err
 	}
-	return ret[0].(string), nil
+	msg, ok := ret[0].(string)
+	if ok {
+		return msg, nil
+	}
+	return "", nil
 }
 
 // This is not implemented yet.
