@@ -33,6 +33,7 @@ func init() {
 
 type options struct {
 	username, password string
+	transport          http.RoundTripper
 }
 
 // ClientOption is used to customize the client.
@@ -43,6 +44,13 @@ func WithAuthentication(username, password string) ClientOption {
 	return func(o *options) {
 		o.username = username
 		o.password = password
+	}
+}
+
+// WithTransport sets the RoundTripper representing the ability to execute a single HTTP transaction, obtaining the Response for a given Request.
+func WithTransport(transport http.RoundTripper) ClientOption {
+	return func(o *options) {
+		o.transport = transport
 	}
 }
 
@@ -77,17 +85,21 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 		o(opt)
 	}
 
-	var tr http.RoundTripper = http.DefaultTransport
+	var transport = http.DefaultTransport
+
+	if opt.transport != nil {
+		transport = opt.transport
+	}
 
 	if opt.username != "" && opt.password != "" {
-		tr = &basicAuthTransport{
-			username: opt.username,
-			password: opt.password,
-			rt:       tr,
+		transport = &basicAuthTransport{
+			username:  opt.username,
+			password:  opt.password,
+			transport: transport,
 		}
 	}
 
-	rpc, err := xmlrpc.NewClient(url, tr)
+	rpc, err := xmlrpc.NewClient(url, transport)
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +128,9 @@ func NewUnixSocketClient(path string, opts ...ClientOption) (*Client, error) {
 
 	if opt.username != "" && opt.password != "" {
 		tr = &basicAuthTransport{
-			username: opt.username,
-			password: opt.password,
-			rt:       tr,
+			username:  opt.username,
+			password:  opt.password,
+			transport: tr,
 		}
 	}
 
@@ -133,15 +145,15 @@ func NewUnixSocketClient(path string, opts ...ClientOption) (*Client, error) {
 
 }
 
-// basicAuthTransport is an http.RoundTripper that wraps another http.RoundTripper
+// basicAuthTransport is a http.RoundTripper that wraps another http.RoundTripper
 // and injects basic auth credentials into each request.
 type basicAuthTransport struct {
-	rt       http.RoundTripper
-	username string
-	password string
+	transport http.RoundTripper
+	username  string
+	password  string
 }
 
 func (b basicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.SetBasicAuth(b.username, b.password)
-	return b.rt.RoundTrip(req)
+	return b.transport.RoundTrip(req)
 }
