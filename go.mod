@@ -1,4 +1,4 @@
-module go-supervisord
+module github.com/abrander/go-supervisord
 
 go 1.19
 
